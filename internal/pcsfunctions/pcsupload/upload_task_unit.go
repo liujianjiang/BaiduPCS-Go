@@ -102,7 +102,6 @@ func (utu *UploadTaskUnit) prepareFile() {
 	}
 
 	if utu.NoRapidUpload {
-		//fmt.Printf("[%s] 注意: 跳过秒传将无法使用断点续传...\n", utu.taskInfo.Id())
 		pcsError, jsonData := utu.PCS.FakeRapidUpload(utu.SavePath, utu.Policy, utu.LocalFileChecksum.Length)
 		if pcsError != nil {
 			errcode := pcsError.GetRemoteErrCode()
@@ -113,6 +112,10 @@ func (utu *UploadTaskUnit) prepareFile() {
 			} else {
 				fmt.Printf("[%s] 目标文件已存在, 跳过...\n", utu.taskInfo.Id())
 				utu.Step = JustGoon
+				// 记录到历史
+				if utu.UploadHistory != nil {
+					utu.UploadHistory.Add(&utu.LocalFileChecksum.LocalFileMeta)
+				}
 				return
 			}
 		}
@@ -247,6 +250,7 @@ func (utu *UploadTaskUnit) rapidUpload() (isContinue bool, result *taskframework
 					result.Extra = baidupcs.SkipPolicy
 					result.Err = nil
 					result.ResultMessage = fmt.Sprintf("%s 目标已存在, 跳过", utu.SavePath)
+					result.Succeed = true
 				}
 				result.NeedRetry = false
 				return
@@ -255,6 +259,7 @@ func (utu *UploadTaskUnit) rapidUpload() (isContinue bool, result *taskframework
 				result.Extra = baidupcs.RsyncPolicy
 				result.Err = nil
 				result.ResultMessage = fmt.Sprintf("%s 目标大小未发生改变, 跳过", utu.SavePath)
+				result.Succeed = true
 				result.NeedRetry = false
 				return
 			}
@@ -356,6 +361,7 @@ func (utu *UploadTaskUnit) upload() (result *taskframework.TaskUnitRunResult) {
 					result.Extra = baidupcs.SkipPolicy
 					result.Err = nil
 					result.ResultMessage = fmt.Sprintf("%s 目标已存在, 跳过", utu.SavePath)
+					result.Succeed = true
 				}
 				result.NeedRetry = false
 				return
@@ -364,6 +370,7 @@ func (utu *UploadTaskUnit) upload() (result *taskframework.TaskUnitRunResult) {
 				result.Extra = baidupcs.RsyncPolicy
 				result.Err = nil
 				result.ResultMessage = fmt.Sprintf("%s 目标大小未发生改变, 跳过", utu.SavePath)
+				result.Succeed = true
 				result.NeedRetry = false
 				return
 			case 31363:
@@ -382,6 +389,7 @@ func (utu *UploadTaskUnit) upload() (result *taskframework.TaskUnitRunResult) {
 					result.Extra = baidupcs.SkipPolicy
 					result.Err = nil
 					result.ResultMessage = fmt.Sprintf("%s 目标已存在, 跳过", utu.SavePath)
+					result.Succeed = true
 				}
 				result.NeedRetry = false
 				return
@@ -456,6 +464,13 @@ func (utu *UploadTaskUnit) Run() (result *taskframework.TaskUnitRunResult) {
 	}
 	defer utu.LocalFileChecksum.Close() // 关闭文件
 
+	// 本地排重: 检查上传历史记录, 在秒传之前
+	if utu.UploadHistory != nil && utu.UploadHistory.HasUploaded(&utu.LocalFileChecksum.LocalFileMeta) {
+		fmt.Printf("[%s] %s 文件未修改, 跳过\n", utu.taskInfo.Id(), utu.LocalFileChecksum.Path)
+		result = &taskframework.TaskUnitRunResult{Succeed: true}
+		return
+	}
+
 	// 准备文件
 	utu.prepareFile()
 
@@ -473,7 +488,10 @@ stepUploadRapidUpload:
 	{
 		isContinue, rapidUploadResult := utu.rapidUpload()
 		if !isContinue {
-			// 不继续, 返回秒传的结果
+			// 秒传跳过时也记录到历史
+			if rapidUploadResult.Succeed && utu.UploadHistory != nil {
+				utu.UploadHistory.Add(&utu.LocalFileChecksum.LocalFileMeta)
+			}
 			return rapidUploadResult
 		}
 	}

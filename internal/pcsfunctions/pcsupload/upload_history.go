@@ -72,23 +72,13 @@ func (uh *UploadHistory) HasUploaded(meta *checksum.LocalFileMeta) bool {
 		return false
 	}
 
-	// 比较文件大小、MD5和修改时间
+	// 比较文件大小和修改时间
 	if record.Length != meta.Length {
 		return false
 	}
 
 	if record.ModTime != meta.ModTime {
 		return false
-	}
-
-	// 比较MD5
-	if len(record.MD5) != len(meta.MD5) {
-		return false
-	}
-	for i := range record.MD5 {
-		if record.MD5[i] != meta.MD5[i] {
-			return false
-		}
 	}
 
 	return true

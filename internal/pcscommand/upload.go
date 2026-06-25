@@ -147,17 +147,6 @@ func RunUpload(localPaths []string, savePath string, opt *UploadOptions) {
 				continue
 			}
 
-			// 检查上传历史记录
-			if uploadHistory != nil {
-				meta := checksum.NewLocalFileChecksum(walkedFiles[k3], int(baidupcs.SliceMD5Size))
-				if err := meta.OpenPath(); err == nil {
-					if uploadHistory.HasUploaded(&meta.LocalFileMeta) {
-						fmt.Printf("[0] %s 文件已上传过且未修改，跳过!\n", walkedFiles[k3])
-						continue
-					}
-				}
-			}
-
 			LoadCount++
 			info := executor.Append(&pcsupload.UploadTaskUnit{
 				LocalFileChecksum: checksum.NewLocalFileChecksum(walkedFiles[k3], int(baidupcs.SliceMD5Size)),
